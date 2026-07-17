@@ -39,6 +39,7 @@ struct ActionCenterView: View {
                             message: model.isScanning ? "Headroom is checking your folders now." : "Headroom did not find a useful, low-risk way to make space."
                         )
                     }
+
                 } else {
                     ForEach(Array(model.recommendations.enumerated()), id: \.element.id) { index, recommendation in
                         RecommendationCard(rank: index + 1, recommendation: recommendation)
@@ -429,11 +430,43 @@ private struct FileExplanationSheet: View {
                             HStack {
                                 Label(explanation.source.rawValue, systemImage: explanation.source == .ai ? "sparkles" : "lock.fill")
                                     .font(.caption.weight(.semibold)).foregroundStyle(explanation.source == .ai ? Palette.mint : .secondary)
+                                if explanation.previewWasAnalyzed {
+                                    Label("Preview inspected", systemImage: "photo")
+                                        .font(.caption.weight(.medium)).foregroundStyle(Palette.mint)
+                                }
                                 Spacer()
                                 StatusPill(text: explanation.confidence.label, color: explanation.confidence.color)
                             }
                             Text(explanation.headline).font(.title3.weight(.semibold))
                             Text(explanation.summary).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+
+                    Panel {
+                        HStack(alignment: .top, spacing: 14) {
+                            Image(systemName: explanation.decision.icon)
+                                .font(.title2)
+                                .foregroundStyle(explanation.decision.color)
+                                .frame(width: 42, height: 42)
+                                .background(explanation.decision.color.opacity(0.11), in: RoundedRectangle(cornerRadius: 11))
+                                .accessibilityHidden(true)
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text("Headroom’s call").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                                Text(explanation.decision.title).font(.title3.weight(.semibold)).foregroundStyle(explanation.decision.color)
+                                Text(explanation.decisionReason).font(.callout).foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+
+                    if let suggestion = explanation.organizationSuggestion, !suggestion.isEmpty {
+                        Panel {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Label("Where this belongs", systemImage: "folder.badge.gearshape")
+                                    .font(.headline).foregroundStyle(Palette.mint)
+                                Text(suggestion).font(.callout).foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                     }
 
@@ -463,19 +496,24 @@ private struct FileExplanationSheet: View {
     private var aiSecondOpinion: some View {
         VStack(alignment: .leading, spacing: 10) {
             Divider()
-            Text("Want a second opinion?").font(.headline)
+            Text("Want a more specific recommendation?").font(.headline)
             if model.isExplaining(item) {
                 HStack(spacing: 10) {
                     ProgressView().controlSize(.small)
-                    Text("Asking AI to interpret the metadata…").foregroundStyle(.secondary)
+                    Text(model.aiImageAnalysisEnabled && ["jpg", "jpeg", "png", "heic", "tif", "tiff", "gif"].contains(item.url.pathExtension.lowercased())
+                         ? "Asking AI to interpret the metadata and reduced preview…"
+                         : "Asking AI to interpret the metadata…")
+                        .foregroundStyle(.secondary)
                 }
             } else if model.aiExplanationsEnabled && model.hasAIAPIKey {
-                Text("AI receives only the file name, a few folder names, size, age, and the clues above. It never receives this file’s contents or its complete path.")
+                Text(model.aiImageAnalysisEnabled
+                     ? "AI receives the file metadata and, for supported images, a reduced preview. This can recognize product screenshots and visual references. The complete path is never sent."
+                     : "AI receives only the file name, a few folder names, size, age, and the clues above. It does not receive file contents or the complete path.")
                     .font(.callout).foregroundStyle(.secondary)
-                Button("Ask AI for a second opinion") { model.requestAIExplanation(for: item) }
+                Button("Ask AI what I should do") { model.requestAIExplanation(for: item) }
                     .buttonStyle(.borderedProminent)
             } else {
-                Text("On-device explanations are always private. To use an optional AI second opinion, turn it on and add your own OpenAI API key in Headroom Settings.")
+                Text("On-device recommendations are always private. To use optional AI analysis, turn it on and add your own OpenAI API key in Headroom Settings.")
                     .font(.callout).foregroundStyle(.secondary)
                 Label("No file contents leave your Mac", systemImage: "lock.fill")
                     .font(.caption.weight(.medium)).foregroundStyle(Palette.mint)

@@ -2,6 +2,23 @@ import Foundation
 
 public enum RiskLevel: String, Codable, Sendable { case low, medium, high }
 public enum Confidence: String, Codable, Sendable { case high, medium, low }
+public enum FileDecision: String, Codable, CaseIterable, Sendable {
+    case keep, offload, remove, review
+
+    public var title: String {
+        switch self {
+        case .keep: "Keep it"
+        case .offload: "Offload it"
+        case .remove: "Delete it"
+        case .review: "Review it"
+        }
+    }
+}
+
+public enum OrganizationSuggestionSource: String, Codable, Sendable {
+    case onDevice = "On-device pattern"
+    case ai = "AI organization plan"
+}
 public enum RecommendationKind: String, Codable, Sendable {
     case generatedData, oldInstaller, largeRecentFile, duplicate, cloudLocalCopy, screenRecording, largeVideo
 }
@@ -112,6 +129,27 @@ public struct RecoveryPlan: Sendable {
     public var estimatedRecovery: Int64 { recommendations.reduce(0) { $0 + $1.recoveryBytes } }
     public var meetsTarget: Bool { estimatedRecovery >= targetBytes }
     public var itemCount: Int { recommendations.reduce(0) { $0 + $1.affectedItems.count } }
+}
+
+public struct OrganizationSuggestion: Identifiable, Hashable, Sendable {
+    public let id: String
+    public let source: OrganizationSuggestionSource
+    public let title: String
+    public let detail: String
+    public let reason: String
+    public let suggestedFolder: String
+    public let confidence: Confidence
+    public let items: [ScannedItem]
+
+    public init(id: String, source: OrganizationSuggestionSource, title: String, detail: String,
+                reason: String, suggestedFolder: String, confidence: Confidence, items: [ScannedItem]) {
+        self.id = id; self.source = source; self.title = title; self.detail = detail
+        self.reason = reason; self.suggestedFolder = suggestedFolder
+        self.confidence = confidence; self.items = items
+    }
+
+    public var totalBytes: Int64 { items.reduce(0) { $0 + $1.allocatedSize } }
+    public var distinctFolderCount: Int { Set(items.map { $0.url.deletingLastPathComponent().path }).count }
 }
 
 public struct ActionRecord: Identifiable, Codable, Sendable {

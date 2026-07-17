@@ -51,6 +51,7 @@ struct RootView: View {
         switch model.destination {
         case .home: DashboardView()
         case .actions: ActionCenterView()
+        case .organize: OrganizeView()
         case .changes: ChangesView()
         case .explore: ExploreView()
         case .history: HistoryView()
@@ -118,8 +119,8 @@ private struct OnboardingView: View {
                     Text("Headroom turns storage into a few clear choices. You review every file before anything changes.").font(.title3).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Label("Everything stays on this Mac", systemImage: "lock.fill").font(.headline).foregroundStyle(Palette.mint)
-                Text("Headroom looks at file names, sizes, locations, and dates. It never uploads your file list or file contents.").font(.callout).foregroundStyle(.secondary)
+                Label("Local by default", systemImage: "lock.fill").font(.headline).foregroundStyle(Palette.mint)
+                Text("Headroom looks at file names, sizes, locations, and dates on this Mac. Optional AI analysis runs only when you explicitly request it.").font(.callout).foregroundStyle(.secondary)
             }
             .padding(34).frame(width: 390).background(LinearGradient(colors: [Palette.mintSoft, Palette.ink], startPoint: .topLeading, endPoint: .bottomTrailing))
 

@@ -32,12 +32,16 @@ open dist/Headroom.app
 - Dashboard, Action Center, What Changed, Explore, History, and Permissions views
 - Target-based low-risk recovery plans such as “safely recover 30 GB”
 - Ranked playbooks for Xcode Derived Data, app caches, Node dependencies, old installers, large recent files, cloud copies, and exact duplicates
+- File-specific keep, offload, delete, or review recommendations with evidence and cautions
+- Cross-folder organization suggestions for screenshots, projects, and related file groups
+- Optional, user-initiated OpenAI analysis for deeper file and organization recommendations, including opt-in reduced image previews
 - Recommendation snoozing, suppression, and protected folders or file categories
 - Time-range storage statements with application, file-type, and folder breakdowns
 - Preview, Finder reveal, local opening, Move to Trash, and confirmation
 - Post-action free-space measurement and durable action history
 - Menu-bar health companion
 - Privacy-first onboarding and contextual permission explanation
-- No network dependencies or metadata uploads
+- Fully useful local-first mode with no required account or network connection
+- Optional AI requests send only disclosed metadata and, when separately enabled, a reduced image preview
 
 The release-plan items intentionally deferred from Release 1—cloud archiving, hosted storage, automatic cleanup rules, cross-device sync, and near-duplicate analysis—remain out of scope.

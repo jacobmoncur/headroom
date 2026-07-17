@@ -130,6 +130,26 @@ extension FileExplanationConfidence {
     }
 }
 
+extension FileDecision {
+    var color: Color {
+        switch self {
+        case .keep: Palette.mint
+        case .offload: Color.blue
+        case .remove: Palette.coral
+        case .review: Palette.amber
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .keep: "pin.fill"
+        case .offload: "icloud.and.arrow.up"
+        case .remove: "trash"
+        case .review: "eye"
+        }
+    }
+}
+
 extension Recommendation {
     var friendlySafetyLabel: String {
         switch risk {
