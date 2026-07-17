@@ -2,6 +2,8 @@
 
 Headroom is a local-first macOS storage advisor. It monitors selected folders, preserves a history of storage snapshots, explains meaningful changes, and ranks reversible cleanup opportunities.
 
+[Visit the Headroom website](https://jacobmoncur.github.io/headroom/)
+
 ## Run
 
 Requires macOS 14 or later and Xcode 15 or later.
