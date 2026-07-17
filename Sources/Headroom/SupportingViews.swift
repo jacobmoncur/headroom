@@ -101,8 +101,8 @@ struct PermissionsView: View {
                     .background(Palette.mint.opacity(0.11), in: RoundedRectangle(cornerRadius: 14))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Your files stay on this Mac").font(.title3.weight(.semibold))
-                    Text("Headroom checks file names, locations, dates, and sizes to explain your storage. It does not upload your file list or file contents.")
+                    Text("Local unless you explicitly ask AI").font(.title3.weight(.semibold))
+                    Text("Storage checks stay on this Mac. Headroom sends metadata—or a reduced image preview—only when you explicitly ask its optional AI features.")
                         .font(.body).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Label(inaccessible.isEmpty ? "Headroom can check all selected folders" : "Some selected folders could not be checked", systemImage: inaccessible.isEmpty ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
@@ -244,9 +244,13 @@ struct SettingsView: View {
                 Label("Storage checks happen on this Mac", systemImage: "lock.fill")
                 Label("Headroom never empties Trash", systemImage: "trash.slash")
             }
-            Section("AI file explanations") {
-                Toggle("Use OpenAI for a second opinion", isOn: $model.aiExplanationsEnabled)
-                Text("Headroom always explains common files on your Mac first. When you choose Ask AI, it sends only the file name, a few parent-folder names, size, age, and Headroom’s local clues—never file contents or a full path.")
+            Section("AI recommendations") {
+                Toggle("Use OpenAI for recommendations", isOn: $model.aiExplanationsEnabled)
+                Text("Headroom works locally first. When you explicitly ask AI, it sends the file name, a few parent-folder names, size, age, and local clues—never the complete path.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Toggle("Let AI inspect reduced image previews", isOn: $model.aiImageAnalysisEnabled)
+                    .disabled(!model.aiExplanationsEnabled)
+                Text("When this is on, asking AI about a supported image also sends a reduced JPEG preview. This lets Headroom recognize product screenshots and visual references. Other file contents are never sent.")
                     .font(.caption).foregroundStyle(.secondary)
                 if model.hasAIAPIKey {
                     Label("Your API key is saved in this Mac’s Keychain", systemImage: "key.fill")

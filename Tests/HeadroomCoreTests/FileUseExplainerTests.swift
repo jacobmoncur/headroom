@@ -8,6 +8,8 @@ final class FileUseExplainerTests: XCTestCase {
         XCTAssertEqual(explanation.confidence, .high)
         XCTAssertEqual(explanation.headline, "Chromium language and text data")
         XCTAssertTrue(explanation.summary.localizedCaseInsensitiveContains("Chromium"))
+        XCTAssertEqual(explanation.decision, .remove)
+        XCTAssertTrue(explanation.decisionReason.localizedCaseInsensitiveContains("replaceable"))
     }
 
     func testPrismaEngineManifestGetsSpecificOnDeviceExplanation() {
@@ -29,8 +31,35 @@ final class FileUseExplainerTests: XCTestCase {
         let local = FileUseExplainer.explain(item)
         let input = AIFileExplanationInput(item: item, localExplanation: local)
         XCTAssertEqual(input.fileName, "icudtl.dat")
-        XCTAssertFalse(input.parentFolders.joined(separator: "/").contains("/Users/private-name"))
+        XCTAssertFalse(input.parentFolders.contains("private-name"))
+        XCTAssertFalse(input.parentFolders.contains("Users"))
         XCTAssertLessThanOrEqual(input.parentFolders.count, 4)
+    }
+
+    func testAIOrganizationCandidateExcludesHomeFolderAndUsername() {
+        let item = fixture(path: "/Users/private-name/Desktop/Headroom mockup.png")
+        let candidate = AIOrganizationCandidate(id: "file-0", item: item)
+        XCTAssertEqual(candidate.parentFolders, ["Desktop"])
+    }
+
+    func testCloudBackedFileRecommendsOffloading() {
+        let item = ScannedItem(url: URL(fileURLWithPath: "/Users/example/Documents/archive.mov"),
+                               logicalSize: 50_000_000, allocatedSize: 50_000_000,
+                               modifiedAt: .now.addingTimeInterval(-100 * 86_400), category: "Documents",
+                               fileType: "Video", cloudBacked: true)
+        let explanation = FileUseExplainer.explain(item)
+        XCTAssertEqual(explanation.decision, .offload)
+        XCTAssertTrue(explanation.decisionReason.localizedCaseInsensitiveContains("cloud"))
+    }
+
+    func testRecentScreenshotRecommendsKeepingAndOrganizing() {
+        let item = ScannedItem(url: URL(fileURLWithPath: "/Users/example/Desktop/Screenshot 2026-07-16 at 10.00.00 AM.png"),
+                               logicalSize: 12_000_000, allocatedSize: 12_000_000,
+                               modifiedAt: .now.addingTimeInterval(-2 * 86_400), category: "Desktop",
+                               fileType: "Images")
+        let explanation = FileUseExplainer.explain(item)
+        XCTAssertEqual(explanation.decision, .keep)
+        XCTAssertNotNil(explanation.organizationSuggestion)
     }
 
     private func fixture(path: String) -> ScannedItem {

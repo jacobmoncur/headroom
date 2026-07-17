@@ -21,9 +21,9 @@ final class QuickLookController: NSObject, @MainActor QLPreviewPanelDataSource {
 final class AppModel: ObservableObject {
     enum TrustMode: String, CaseIterable, Identifiable { case observer = "Observer", advisor = "Advisor"; var id: String { rawValue } }
     enum Destination: String, CaseIterable, Identifiable {
-        case home = "My Storage", actions = "Make Space", explore = "What’s Using Space", changes = "Recent Changes", history = "Past Cleanups", permissions = "Privacy & Folders"
+        case home = "My Storage", actions = "Make Space", organize = "Organize Files", explore = "What’s Using Space", changes = "Recent Changes", history = "Past Cleanups", permissions = "Privacy & Folders"
         var id: String { rawValue }
-        var icon: String { switch self { case .home: "house"; case .actions: "sparkles"; case .explore: "externaldrive"; case .changes: "chart.xyaxis.line"; case .history: "clock.arrow.circlepath"; case .permissions: "hand.raised" } }
+        var icon: String { switch self { case .home: "house"; case .actions: "sparkles"; case .organize: "square.grid.3x3.topleft.filled"; case .explore: "externaldrive"; case .changes: "chart.xyaxis.line"; case .history: "clock.arrow.circlepath"; case .permissions: "hand.raised" } }
     }
 
     @Published var destination: Destination = .home
@@ -32,6 +32,7 @@ final class AppModel: ObservableObject {
     @Published var actions: [ActionRecord] = []
     @Published var feedback: [RecommendationFeedback] = []
     @Published var recommendations: [Recommendation] = []
+    @Published var organizationSuggestions: [OrganizationSuggestion] = []
     @Published var duplicateGroups: [[ScannedItem]] = []
     @Published var isScanning = false
     @Published var isFindingDuplicates = false
@@ -49,10 +50,13 @@ final class AppModel: ObservableObject {
     @Published var snoozedRecommendationUntil: [String: TimeInterval] { didSet { UserDefaults.standard.set(snoozedRecommendationUntil, forKey: "snoozedRecommendationUntil") } }
     @Published var includePathsInDiagnostics: Bool { didSet { UserDefaults.standard.set(includePathsInDiagnostics, forKey: "includePathsInDiagnostics") } }
     @Published var aiExplanationsEnabled: Bool { didSet { UserDefaults.standard.set(aiExplanationsEnabled, forKey: "aiExplanationsEnabled") } }
+    @Published var aiImageAnalysisEnabled: Bool { didSet { UserDefaults.standard.set(aiImageAnalysisEnabled, forKey: "aiImageAnalysisEnabled") } }
     @Published var aiModel: String { didSet { UserDefaults.standard.set(aiModel, forKey: "aiExplanationModel") } }
     @Published private(set) var hasAIAPIKey = false
     @Published private(set) var isExplainingItemIDs = Set<String>()
     @Published var aiExplanationError: String?
+    @Published private(set) var isOrganizingWithAI = false
+    @Published var aiOrganizationError: String?
     @Published var selectedExplanationItem: ScannedItem?
     @Published var extraRoots: [URL] { didSet {
         UserDefaults.standard.set(extraRoots.map(\.path), forKey: "extraRoots")
@@ -70,6 +74,7 @@ final class AppModel: ObservableObject {
     private var pendingChangedPaths = Set<String>()
     private var rootIndex: [String: StorageSnapshot] = [:]
     private var aiExplanations: [String: FileUseExplanation] = [:]
+    private var aiOrganizationSuggestions: [OrganizationSuggestion] = []
     var current: StorageSnapshot? { snapshots.last ?? provisionalSnapshot }
     var previous: StorageSnapshot? { snapshots.dropLast().last }
     var health: StorageHealth { StorageAdvisor.health(current: current, previous: previous, reserve: Int64(reserveGB * 1_000_000_000)) }
@@ -89,6 +94,7 @@ final class AppModel: ObservableObject {
         self.snoozedRecommendationUntil = UserDefaults.standard.dictionary(forKey: "snoozedRecommendationUntil") as? [String: TimeInterval] ?? [:]
         self.includePathsInDiagnostics = UserDefaults.standard.bool(forKey: "includePathsInDiagnostics")
         self.aiExplanationsEnabled = UserDefaults.standard.bool(forKey: "aiExplanationsEnabled")
+        self.aiImageAnalysisEnabled = UserDefaults.standard.bool(forKey: "aiImageAnalysisEnabled")
         self.aiModel = UserDefaults.standard.string(forKey: "aiExplanationModel") ?? "gpt-4o-mini"
         self.hasAIAPIKey = KeychainSecretStore.loadAPIKey() != nil
         self.extraRoots = (UserDefaults.standard.stringArray(forKey: "extraRoots") ?? []).map(URL.init(fileURLWithPath:))
@@ -195,6 +201,8 @@ final class AppModel: ObservableObject {
                                            protectedPaths: protectedPaths, protectedFileTypes: protectedFileTypes)
                 .filter { !dismissedRecommendationIDs.contains($0.id) && snoozedRecommendationUntil[$0.id, default: 0] <= Date.now.timeIntervalSince1970 }
         } ?? []
+        organizationSuggestions = current.map { FileOrganizer.suggestions(for: $0) } ?? []
+        organizationSuggestions.append(contentsOf: aiOrganizationSuggestions)
     }
 
     func recoveryPlan(targetGB: Double) -> RecoveryPlan {
@@ -267,6 +275,8 @@ final class AppModel: ObservableObject {
         KeychainSecretStore.deleteAPIKey()
         hasAIAPIKey = false
         aiExplanations.removeAll()
+        aiOrganizationSuggestions.removeAll()
+        refreshRecommendations()
     }
 
     func requestAIExplanation(for item: ScannedItem) {
@@ -275,25 +285,78 @@ final class AppModel: ObservableObject {
             return
         }
         guard let apiKey = KeychainSecretStore.loadAPIKey() else {
-            aiExplanationError = "Add an OpenAI API key in Settings before asking for an AI second opinion."
+            aiExplanationError = "Add an OpenAI API key in Settings before asking for an AI recommendation."
             return
         }
         guard !isExplaining(item) else { return }
         let local = localExplanation(for: item)
-        let metadata = AIFileExplanationInput(item: item, localExplanation: local)
+        let preview = aiImageAnalysisEnabled ? OpenAIFileExplainer.previewDataURL(for: item) : nil
+        let relatedSignals = organizationSuggestions.filter { suggestion in
+            suggestion.items.contains(where: { $0.id == item.id })
+        }.map { "\($0.title): \($0.reason)" }
+        let metadata = AIFileExplanationInput(item: item, localExplanation: local,
+                                              relatedFileSignals: relatedSignals,
+                                              previewIncluded: preview != nil)
         isExplainingItemIDs.insert(item.id)
         aiExplanationError = nil
         Task {
             do {
-                let explanation = try await OpenAIFileExplainer.explain(metadata, apiKey: apiKey, model: aiModel)
+                let explanation = try await OpenAIFileExplainer.explain(metadata, previewDataURL: preview,
+                                                                        apiKey: apiKey, model: aiModel)
                 aiExplanations[item.id] = FileUseExplanation(id: item.id, source: .ai,
                     headline: explanation.headline, summary: explanation.summary,
                     confidence: explanation.confidence, evidence: explanation.evidence,
-                    caution: explanation.caution)
+                    caution: explanation.caution, decision: explanation.decision,
+                    decisionReason: explanation.decisionReason,
+                    organizationSuggestion: explanation.organizationSuggestion,
+                    previewWasAnalyzed: explanation.previewWasAnalyzed)
             } catch {
                 aiExplanationError = error.localizedDescription
             }
             isExplainingItemIDs.remove(item.id)
+        }
+    }
+
+    func requestAIOrganizationPlan() {
+        guard aiExplanationsEnabled else {
+            aiOrganizationError = "AI recommendations are off. Turn them on in Settings first."
+            return
+        }
+        guard let apiKey = KeychainSecretStore.loadAPIKey() else {
+            aiOrganizationError = "Add an OpenAI API key in Settings before asking for an organization plan."
+            return
+        }
+        guard let sourceItems = current?.largeItems.prefix(180), !sourceItems.isEmpty, !isOrganizingWithAI else { return }
+        let items = Array(sourceItems)
+        let pairs = items.enumerated().map { index, item in
+            ("file-\(index)", item)
+        }
+        let candidates = pairs.map { AIOrganizationCandidate(id: $0.0, item: $0.1) }
+        let itemByID = Dictionary(uniqueKeysWithValues: pairs)
+        isOrganizingWithAI = true
+        aiOrganizationError = nil
+        Task {
+            do {
+                let groups = try await OpenAIFileExplainer.organize(candidates, apiKey: apiKey, model: aiModel)
+                aiOrganizationSuggestions = groups.enumerated().compactMap { index, group in
+                    let matched = Array(Set(group.fileIDs)).compactMap { itemByID[$0] }
+                    guard matched.count >= 2,
+                          Set(matched.map { $0.url.deletingLastPathComponent().path }).count >= 2 else { return nil }
+                    return OrganizationSuggestion(
+                        id: "ai-organize-\(index)-\(group.fileIDs.sorted().joined(separator: "-"))",
+                        source: .ai, title: group.title, detail: group.detail,
+                        reason: group.reason, suggestedFolder: group.suggestedFolder,
+                        confidence: group.confidence, items: matched
+                    )
+                }
+                if aiOrganizationSuggestions.isEmpty {
+                    aiOrganizationError = "AI did not find a strong cross-folder relationship in the large files Headroom can currently see."
+                }
+                refreshRecommendations()
+            } catch {
+                aiOrganizationError = error.localizedDescription
+            }
+            isOrganizingWithAI = false
         }
     }
 
